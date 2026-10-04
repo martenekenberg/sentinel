@@ -4,6 +4,7 @@
   const CFG = Object.assign({ DATA_BASE: "./data" }, window.SENTINEL_CONFIG || {});
   const COLORS = { police: "#4cc9ff", swe_mil: "#ffb020", foreign_mil: "#ff6b5e" };
   const LABELS = { police: "POLICE", swe_mil: "SWEDISH MIL", foreign_mil: "FOREIGN MIL" };
+  const CAT_RANK = { police: 0, swe_mil: 1, foreign_mil: 2 };
   const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   const REGIONS = {
     all: { center: [62.5, 16.5], zoom: 5 },
@@ -149,6 +150,7 @@
   const gridLayer = L.layerGroup().addTo(map);
   const trackLayer = L.layerGroup().addTo(map);
   let heatLayer = null;
+  let labelled = [];     // [{a, marker}] for the aircraft markers currently on the map
 
   function drawRings() {
     ringLayer.clearLayers();
@@ -204,8 +206,37 @@
     return state.aircraft.filter((a) => state.cats[a.cat] && !state.typesOff.has(tkey(a)));
   }
 
+  // Hide labels that would overlap. Higher-priority aircraft get their label
+  // first; each label tries the right of its symbol, then the left, else hides.
+  // Symbols are never hidden, and labels never cover another symbol.
+  function declutter() {
+    const items = labelled
+      .map(({ a, marker }) => ({ a, el: marker.getElement() }))
+      .filter((x) => x.el);
+    const taken = items.map((x) => x.el.querySelector("svg").getBoundingClientRect());
+    const hit = (r) => taken.some((t) => r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top);
+    items.sort((x, y) =>
+      (y.a.hex === state.selected) - (x.a.hex === state.selected) ||
+      CAT_RANK[x.a.cat] - CAT_RANK[y.a.cat] ||
+      y.a.n - x.a.n);
+    // Measure everything first, then write classes, so layout runs only once.
+    const labs = items.map(({ el }) => el.querySelector(".lab"));
+    for (const lab of labs) lab.classList.remove("left", "off");
+    const rects = labs.map((lab) => lab.getBoundingClientRect());
+    const place = labs.map((lab, i) => {
+      const r = rects[i];
+      const gap = 28;                      // .lab sits 14px right of the symbol; .left mirrors it
+      const left = { left: r.left - gap - r.width, right: r.left - gap, top: r.top, bottom: r.bottom };
+      if (!hit(r)) { taken.push(r); return ""; }
+      if (!hit(left)) { taken.push(left); return "left"; }
+      return "off";
+    });
+    labs.forEach((lab, i) => { if (place[i]) lab.classList.add(place[i]); });
+  }
+
   function renderMap() {
     trackLayer.clearLayers();
+    labelled = [];
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
     const vis = visibleAircraft();
 
@@ -241,7 +272,7 @@
           icon: L.divIcon({ className: "", html: '<div class="ret" style="--police:' + color + '"><i></i><i></i><i></i><i></i></div>', iconSize: [0, 0] })
         }).addTo(trackLayer);
       }
-      L.marker([lat, lon], {
+      const marker = L.marker([lat, lon], {
         keyboard: false, title: name(a),
         icon: L.divIcon({
           className: "",
@@ -249,7 +280,9 @@
           iconSize: [0, 0]
         })
       }).on("click", () => select(a.hex)).addTo(trackLayer);
+      labelled.push({ a, marker });
     }
+    declutter();
   }
 
   function renderPanels() {
@@ -423,6 +456,7 @@
     }
 
     map.on("moveend zoomend", drawGrid);
+    map.on("zoomend", declutter);
   }
 
   // -------------------------------------------------------------------- boot

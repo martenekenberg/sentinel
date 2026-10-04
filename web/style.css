@@ -147,6 +147,9 @@ button:focus-visible, .chan:focus-within, .row:focus-visible { outline: 2px soli
 .mkw svg { position: absolute; left: -8px; top: -8px; }
 .mkw .lab { position: absolute; left: 14px; top: -16px; white-space: nowrap; font-size: 11px; font-weight: 700; line-height: 1.15; text-shadow: 0 0 4px #04080a, 0 0 4px #04080a; }
 .mkw .lab small { display: block; font-weight: 400; font-size: 10px; color: var(--dim); }
+.mkw .lab.left { left: auto; right: 14px; text-align: right; }
+.mkw .lab.off { visibility: hidden; }
+.mkw:hover .lab.off { visibility: visible; }
 .ret { position: relative; width: 0; height: 0; }
 .ret i { position: absolute; width: 8px; height: 8px; border: 0 solid var(--police); }
 .ret i:nth-child(1) { left: -22px; top: -15px; border-width: 1.5px 0 0 1.5px; }
