@@ -4,5 +4,5 @@
 // Production (data lives on the `data` branch of a PUBLIC repo):
 //   "https://raw.githubusercontent.com/<owner>/<repo>/data"
 window.SENTINEL_CONFIG = {
-  DATA_BASE: "./data"
+  DATA_BASE: "https://raw.githubusercontent.com/martenekenberg/sentinel/data"
 };
