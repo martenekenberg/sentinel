@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sentinel | Nordic Airspace</title>
+<meta name="description" content="Where Swedish police and military aircraft have flown, from open ADS-B data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <svg width="36" height="36" viewBox="0 0 40 40" fill="none" stroke="#3dffa8" stroke-width="1.6" aria-hidden="true"><path d="M20 3 L35 11.5 V28.5 L20 37 L5 28.5 V11.5 Z"/><circle cx="20" cy="20" r="6"/></svg>
+      <div>
+        <div class="disp brand-name">Sentinel</div>
+        <div class="dim brand-sub">NORDIC AIRSPACE</div>
+      </div>
+    </div>
+    <div class="status">
+      <span class="live" aria-hidden="true"></span>
+      <span class="disp">Archive</span>
+      <span class="dim" id="winLabel">LOADING</span>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <main class="panel">
+      <div class="ph">
+        <span>Tactical map</span>
+        <span class="regions" id="regions">
+          <button type="button" class="chip" data-region="all">ALL</button>
+          <button type="button" class="chip" data-region="sth">STOCKHOLM</button>
+          <button type="button" class="chip" data-region="got">G&Ouml;TEBORG</button>
+          <button type="button" class="chip" data-region="mal">MALM&Ouml;</button>
+          <button type="button" class="chip" data-region="lul">LULE&Aring;</button>
+        </span>
+      </div>
+
+      <div class="mapbox">
+        <div id="map" aria-label="Map of police and military aircraft tracks over Sweden"></div>
+        <div class="msg" id="msg" hidden></div>
+
+        <div class="drawer">
+          <button type="button" class="dbtn" id="drawerBtn" aria-expanded="false" aria-controls="drawerBody">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true" class="ico"><path d="M2 4h14M5 9h8M7.5 14h3"/></svg>
+            <span>FILTERS</span>
+            <span class="dim small" id="drawerCount"></span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="ico chev"><path id="chev" d="M3 5l4 4 4-4"/></svg>
+          </button>
+          <div class="dbody" id="drawerBody" hidden>
+            <div class="dh">Time window</div>
+            <div class="chips" id="winChips"></div>
+            <div class="dh">Type filter</div>
+            <div class="chips" id="typeChips"></div>
+          </div>
+        </div>
+
+        <div class="ctl">
+          <button type="button" class="cbtn" id="zin" aria-label="Zoom in"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="ico" aria-hidden="true"><path d="M9 3v12M3 9h12"/></svg></button>
+          <button type="button" class="cbtn" id="zout" aria-label="Zoom out"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="ico" aria-hidden="true"><path d="M3 9h12"/></svg></button>
+          <button type="button" class="cbtn" id="zhome" aria-label="Reset view"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="ico" aria-hidden="true"><path d="M2 9l7-6 7 6M4 8v7h10V8"/></svg></button>
+          <div class="zread" id="zread">z5</div>
+          <button type="button" class="cbtn on" id="gridBtn" aria-pressed="true" aria-label="Toggle grid">GRID</button>
+          <button type="button" class="cbtn" id="heatBtn" aria-pressed="false" aria-label="Toggle heat layer">HEAT</button>
+        </div>
+      </div>
+    </main>
+
+    <aside class="side">
+      <section class="panel" aria-label="Channels">
+        <div class="ph"><span>Channels</span></div>
+        <label class="chan"><input type="checkbox" data-cat="police" checked><span data-shape="police"></span><span>Police</span><span class="n" id="n-police" style="color:var(--police)">00</span></label>
+        <label class="chan"><input type="checkbox" data-cat="swe_mil" checked><span data-shape="swe_mil"></span><span>Swedish military</span><span class="n" id="n-swe_mil" style="color:var(--swe)">00</span></label>
+        <label class="chan"><input type="checkbox" data-cat="foreign_mil" checked><span data-shape="foreign_mil"></span><span>Foreign military</span><span class="n" id="n-foreign_mil" style="color:var(--foreign)">00</span></label>
+      </section>
+
+      <section class="panel" aria-label="Selected contact">
+        <div class="ph"><span>Selected</span><span id="selCat"></span></div>
+        <div class="selhead"><div class="disp selreg" id="selReg">NONE</div><div class="dim small" id="selDesc">Pick a contact</div></div>
+        <div id="selRows"></div>
+      </section>
+
+      <section class="panel" aria-label="Contacts">
+        <div class="ph"><span>Contacts</span><span class="dim small" id="contactCount"></span></div>
+        <ul class="contacts" id="contacts"></ul>
+      </section>
+    </aside>
+
+  </div>
+
+  <footer class="foot dim">
+    DATA: ADSB.LOL CONTRIBUTORS (ODbL) // BROADCAST DATA ONLY, NON-BROADCASTING AIRCRAFT ARE NOT SHOWN // <span id="updated"></span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

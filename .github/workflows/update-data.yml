@@ -1,0 +1,56 @@
+name: Update data
+
+on:
+  schedule:
+    # adsb.lol publishes each day's archive in the early hours (UTC) of the next day.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First date to process, YYYY-MM-DD (blank = 2 days ago)"
+        required: false
+      end:
+        description: "Last date to process, YYYY-MM-DD (blank = yesterday)"
+        required: false
+      force:
+        description: "Reprocess days that already exist"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Never run two updates at once: they push to the same branch.
+concurrency:
+  group: sentinel-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - name: Check out code (main)
+        uses: actions/checkout@v4
+        with:
+          path: code
+
+      - name: Check out data branch (creates it on first run)
+        env:
+          REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        run: |
+          if git ls-remote --exit-code --heads "$REMOTE" data >/dev/null 2>&1; then
+            git clone --depth 1 --branch data "$REMOTE" data
+          else
+            mkdir data
+            git -C data init -b data
+            git -C data remote add origin "$REMOTE"
+          fi
+
+      - name: Process days
+        run: |
+          ARGS=""
+          [ -n "${{ inputs.start }}" ] && ARGS="$ARGS --start ${{ inputs.start }}"
+          [ -n "${{ inputs.end }}" ]   && ARGS="$ARGS --end ${{ inputs.end }}"
+          [ "${{ inputs.force }}" = "true" ] && ARGS="$ARGS --force"
+          python3 code/scripts/process_day.py --out data --push $ARGS
