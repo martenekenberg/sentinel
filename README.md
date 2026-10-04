@@ -48,7 +48,9 @@ Rebuild the day index only: `python3 scripts/process_day.py --out web/data --ind
 ## Deploy
 
 1. **Create a public GitHub repo** and push this project to `main`.
-2. **Allow the workflow to push:** Settings > Actions > General > Workflow permissions > *Read and write*.
+2. **Allow the workflow to push:** the workflow asks for `contents: write` itself, which is enough on a personal repo.
+   If the push step fails (for example under an organisation policy), set Settings > Actions > General >
+   Workflow permissions > *Read and write*.
 3. **Backfill:** Actions > *Update data* > *Run workflow*, with a start and end date
    (for example the last 30 days). Each day takes a few minutes on a GitHub runner, so large ranges are
    fine but long. The workflow commits after every day, so nothing is lost if it is interrupted.
