@@ -18,8 +18,8 @@ Map of Swedish police and military aircraft from adsb.lol globe_history archives
 
 ## Known gaps
 - Front end checked in a real browser on 2026-10-03 with the sample day: layout (desktop and 375px phone), fonts, data loading, heat layer, filters and contact selection work. CARTO tiles stopped working without an API key, so the basemap is now Esri World Dark Gray (keyless legacy endpoint, may also go key-only; Stadia Maps is the fallback).
-- 7D/30D windows checked on 2026-10-04 with 27 synthetic days made from the sample: merging, counts, skipped dates and the window chips are correct. Every click rebuilds all layers, so with 30 days each action takes ~100-180 ms (vs ~15 ms for one day). Not yet seen with real multi-day data or over the network.
-- The workflow ran once by hand on GitHub on 2026-10-04 (one day, 1m20s). It created the `data` branch, and its output matched the local sample. The 06:30 UTC scheduled run and multi-day backfills have not been seen yet.
+- 7D/30D windows are correct (checked with synthetic days, then live with the real backfill). With real data, 30D holds ~250 aircraft and ~300k track points (9.4 MB raw, under 0.5 s to download). Map layers are built once per window and restyled on select; the heat layer is thinned to 30k points. Timings in the hidden in-app browser pane are unreliable, so compare work counts (lines built, points projected) instead of milliseconds.
+- Backfill 2026-09-03..2026-10-01 ran on GitHub on 2026-10-04: 29 days in 33 min, no failures. The first scheduled run (2026-10-05) worked but started at 15:02 UTC instead of 06:30: GitHub's scheduler can be hours late.
 - Call signs are not in the archive; aircraft are identified by registration.
 - ADS-B only shows broadcasting aircraft. Military coverage is patchy by nature.
 

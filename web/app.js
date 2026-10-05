@@ -5,6 +5,7 @@
   const COLORS = { police: "#4cc9ff", swe_mil: "#ffb020", foreign_mil: "#ff6b5e" };
   const LABELS = { police: "POLICE", swe_mil: "SWEDISH MIL", foreign_mil: "FOREIGN MIL" };
   const CAT_RANK = { police: 0, swe_mil: 1, foreign_mil: 2 };
+  const HEAT_MAX_POINTS = 30000;
   const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   const REGIONS = {
     all: { center: [62.5, 16.5], zoom: 5 },
@@ -150,7 +151,9 @@
   const gridLayer = L.layerGroup().addTo(map);
   const trackLayer = L.layerGroup().addTo(map);
   let heatLayer = null;
-  let labelled = [];     // [{a, marker}] for the aircraft markers currently on the map
+  let heatKey = null;    // which window + filters the heat layer was built for
+  let layers = new Map();  // hex -> {a, group, marker, sel}, for the current window
+  let rows = new Map();    // hex -> contact list button
 
   function drawRings() {
     ringLayer.clearLayers();
@@ -210,7 +213,8 @@
   // first; each label tries the right of its symbol, then the left, else hides.
   // Symbols are never hidden, and labels never cover another symbol.
   function declutter() {
-    const items = labelled
+    const items = [...layers.values()]
+      .filter((e) => trackLayer.hasLayer(e.group))
       .map(({ a, marker }) => ({ a, el: marker.getElement() }))
       .filter((x) => x.el);
     const taken = items.map((x) => x.el.querySelector("svg").getBoundingClientRect());
@@ -234,57 +238,122 @@
     labs.forEach((lab, i) => { if (place[i]) lab.classList.add(place[i]); });
   }
 
-  function renderMap() {
-    trackLayer.clearLayers();
-    labelled = [];
-    if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-    const vis = visibleAircraft();
+  // Each aircraft is drawn once per window as a few multi-segment lines: the
+  // latest segment, the older ones (dashed) and a glow under each. A filter
+  // change only adds or removes the group; selecting only restyles lines.
+  const GLOW = { weight: 7, opacity: 0.12, dashArray: null };
+  const OLDER = { weight: 1.3, opacity: 0.4, dashArray: "3 5" };
+  const LATEST = { weight: 2.2, opacity: 0.95, dashArray: null };
+  const PICKED = { weight: 3, opacity: 0.95, dashArray: null };
 
-    if (state.heat) {
-      const pts = [];
-      for (const a of vis) for (const s of a.segs) for (const p of s.pts) pts.push([p[1], p[2], 0.5]);
-      heatLayer = L.heatLayer(pts, {
-        radius: 14, blur: 18, maxZoom: 10, minOpacity: 0.25,
-        gradient: { 0.2: "#0b3d33", 0.5: "#1fbf86", 0.8: "#3dffa8", 1: "#eafff6" }
-      }).addTo(map);
-    }
+  function buildAircraft(a) {
+    const group = L.layerGroup();
+    const color = COLORS[a.cat];
+    const onClick = () => select(a.hex);
+    const ll = a.segs.map((s) => s.pts.map((p) => [p[1], p[2]]));
+    const lastLL = ll.slice(-1), olderLL = ll.slice(0, -1);
+    const line = (pts, style, interactive = true) => {
+      const l = L.polyline(pts, Object.assign({ color, interactive }, style));
+      if (interactive) l.on("click", onClick);
+      return l;
+    };
+    const e = {
+      a, group, sel: false,
+      glowOlder: olderLL.length ? line(olderLL, GLOW, false) : null,   // only shown when selected
+      glowLatest: line(lastLL, GLOW, false).addTo(group),
+      older: olderLL.length ? line(olderLL, OLDER).addTo(group) : null,
+      latest: line(lastLL, LATEST).addTo(group),
+      ret: null
+    };
+    const [, lat, lon] = a.lastPt;
+    e.marker = L.marker([lat, lon], {
+      keyboard: false, title: name(a),
+      icon: L.divIcon({
+        className: "",
+        html: `<div class="mkw">${shapeSvg(a.cat)}<span class="lab" style="color:${color}">${esc(name(a))}<small>${esc(a.type || "")}</small></span></div>`,
+        iconSize: [0, 0]
+      })
+    }).on("click", onClick).addTo(group);
+    return e;
+  }
 
-    for (const a of vis) {
-      const color = COLORS[a.cat];
-      const sel = a.hex === state.selected;
-      a.segs.forEach((s, i) => {
-        const ll = s.pts.map((p) => [p[1], p[2]]);
-        const isLast = i === a.segs.length - 1;
-        const onClick = () => select(a.hex);
-        if (isLast || sel) {
-          L.polyline(ll, { color, weight: 7, opacity: 0.12, interactive: false }).addTo(trackLayer);
-        }
-        L.polyline(ll, isLast || sel
-          ? { color, weight: sel ? 3 : 2.2, opacity: 0.95 }
-          : { color, weight: 1.3, opacity: 0.4, dashArray: "3 5" }
-        ).on("click", onClick).addTo(trackLayer);
-      });
+  function raiseLines(e) {
+    if (e.older) e.older.bringToFront();
+    e.latest.bringToFront();
+  }
 
-      const [, lat, lon] = a.lastPt;
-      if (sel) {
-        L.marker([lat, lon], {
+  function setSelected(e, sel) {
+    if (e.sel === sel) return;
+    e.sel = sel;
+    if (e.older) e.older.setStyle(sel ? PICKED : OLDER);
+    e.latest.setStyle(sel ? PICKED : LATEST);
+    if (sel) {
+      if (!e.ret) {
+        const [, lat, lon] = e.a.lastPt;
+        e.ret = L.marker([lat, lon], {
           interactive: false, keyboard: false, zIndexOffset: -100,
-          icon: L.divIcon({ className: "", html: '<div class="ret" style="--police:' + color + '"><i></i><i></i><i></i><i></i></div>', iconSize: [0, 0] })
-        }).addTo(trackLayer);
+          icon: L.divIcon({ className: "", html: '<div class="ret" style="--police:' + COLORS[e.a.cat] + '"><i></i><i></i><i></i><i></i></div>', iconSize: [0, 0] })
+        });
       }
-      const marker = L.marker([lat, lon], {
-        keyboard: false, title: name(a),
-        icon: L.divIcon({
-          className: "",
-          html: `<div class="mkw">${shapeSvg(a.cat)}<span class="lab" style="color:${color}">${esc(name(a))}<small>${esc(a.type || "")}</small></span></div>`,
-          iconSize: [0, 0]
-        })
-      }).on("click", () => select(a.hex)).addTo(trackLayer);
-      labelled.push({ a, marker });
+      e.group.addLayer(e.ret);
+      if (e.glowOlder) e.group.addLayer(e.glowOlder);
+      raiseLines(e);
+    } else {
+      if (e.ret) e.group.removeLayer(e.ret);
+      if (e.glowOlder) e.group.removeLayer(e.glowOlder);
     }
+  }
+
+  function syncAircraft(a, visible) {
+    let e = layers.get(a.hex);
+    if (!visible) { if (e) trackLayer.removeLayer(e.group); return; }
+    if (!e) { e = buildAircraft(a); layers.set(a.hex, e); }
+    setSelected(e, a.hex === state.selected);
+    if (!trackLayer.hasLayer(e.group)) {
+      trackLayer.addLayer(e.group);
+      if (e.sel) raiseLines(e);             // re-adding puts the glow back on top
+    }
+  }
+
+  function resetLayers() {
+    trackLayer.clearLayers();
+    layers = new Map();
+    heatKey = null;
+  }
+
+  function renderHeat(vis) {
+    const key = state.heat
+      ? [state.win && state.win.id, ...Object.entries(state.cats).filter(([, on]) => on).map(([c]) => c), "|", ...[...state.typesOff].sort()].join(",")
+      : null;
+    if (key === heatKey) return;
+    heatKey = key;
+    if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+    if (!key) return;
+    // leaflet-heat re-projects every point on each redraw (and after every pan),
+    // so thin the points to a fixed budget. 30 days is ~300k points.
+    let total = 0;
+    for (const a of vis) total += a.n;
+    const step = Math.max(1, Math.ceil(total / HEAT_MAX_POINTS));
+    const pts = [];
+    let k = 0;
+    for (const a of vis) for (const s of a.segs) for (const p of s.pts) {
+      if (k++ % step === 0) pts.push([p[1], p[2], Math.min(1, 0.5 * step)]);
+    }
+    heatLayer = L.heatLayer(pts, {
+      radius: 14, blur: 18, maxZoom: 10, minOpacity: 0.25,
+      gradient: { 0.2: "#0b3d33", 0.5: "#1fbf86", 0.8: "#3dffa8", 1: "#eafff6" }
+    }).addTo(map);
+  }
+
+  function renderMap() {
+    const vis = visibleAircraft();
+    const shown = new Set(vis);
+    for (const a of state.aircraft) syncAircraft(a, shown.has(a));
+    renderHeat(vis);
     declutter();
   }
 
+  // Counts and the contact list. Rebuilt only when the window or filters change.
   function renderPanels() {
     const vis = visibleAircraft();
 
@@ -294,6 +363,7 @@
 
     const list = $("#contacts");
     list.innerHTML = "";
+    rows = new Map();
     $("#contactCount").textContent = `${vis.length} SHOWN`;
     if (!vis.length) {
       list.innerHTML = '<li class="empty">Nothing matches the current filters.</li>';
@@ -302,20 +372,26 @@
       const li = document.createElement("li");
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "row" + (a.hex === state.selected ? " sel" : "");
+      btn.className = "row";
       btn.innerHTML = `${shapeSvg(a.cat)}<span class="reg">${esc(name(a))}</span><span class="ty">${esc(a.type || "")}</span><span class="np">${a.n.toLocaleString("en-US")}</span>`;
       btn.addEventListener("click", () => { select(a.hex); focusAircraft(a); });
       li.appendChild(btn);
       list.appendChild(li);
+      rows.set(a.hex, btn);
     });
+    renderSelected();
+  }
 
+  // The selected-contact panel and the highlighted row.
+  function renderSelected() {
+    for (const [hex, btn] of rows) btn.classList.toggle("sel", hex === state.selected);
     const a = state.aircraft.find((x) => x.hex === state.selected);
-    const rows = $("#selRows");
+    const kvBox = $("#selRows");
     if (!a) {
       $("#selReg").textContent = "NONE";
       $("#selDesc").textContent = "Pick a contact";
       $("#selCat").textContent = "";
-      rows.innerHTML = "";
+      kvBox.innerHTML = "";
       return;
     }
     $("#selReg").textContent = name(a);
@@ -333,7 +409,7 @@
       ["FIRST SEEN", stamp(a.first.date, a.first.t)],
       ["LAST SEEN", stamp(a.last.date, a.last.t)]
     ];
-    rows.innerHTML = kv.map(([k, v]) => `<div class="kv"><span>${k}</span><span>${esc(v)}</span></div>`).join("");
+    kvBox.innerHTML = kv.map(([k, v]) => `<div class="kv"><span>${k}</span><span>${esc(v)}</span></div>`).join("");
   }
 
   function renderDrawer() {
@@ -383,9 +459,16 @@
   }
 
   function select(hex) {
+    const prev = state.selected;
     state.selected = hex;
-    renderMap();
-    renderPanels();
+    const vis = new Set(visibleAircraft());
+    for (const a of state.aircraft) {
+      if (a.hex === prev || a.hex === hex) syncAircraft(a, vis.has(a));
+    }
+    // Labels only need re-placing if the new selection's label is hidden.
+    const el = layers.has(hex) && layers.get(hex).marker.getElement();
+    if (el && el.querySelector(".lab").classList.contains("off")) declutter();
+    renderSelected();
   }
 
   function focusAircraft(a) {
@@ -408,6 +491,7 @@
       state.aircraft = [];
       showMsg("Could not load flight data for this window. " + err.message);
     }
+    resetLayers();                         // cached layers belong to the old window
     render();
   }
 
