@@ -122,6 +122,7 @@ button:focus-visible, .chan:focus-within, .row:focus-visible { outline: 2px soli
 .chan input { width: 16px; height: 16px; margin: 0; accent-color: var(--green); }
 .chan .n { margin-left: auto; font-size: 15px; }
 .ends { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; }
+.ends + .ends { padding-top: 0; }
 .ends span { display: inline-flex; align-items: center; gap: 6px; }
 .ends span:first-child { color: var(--green); }
 .arealab { color: #3dffa8; opacity: 0.6; font-size: 9px; letter-spacing: 0.12em; white-space: nowrap; }

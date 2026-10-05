@@ -186,28 +186,33 @@
     }).addTo(areaLayer);
   }
 
-  // Why a track segment ends: on the ground, at the area edge, or anything else.
-  function endKind(p) {
+  // Why a track segment starts or ends there: at the area edge, on the
+  // ground, or in the air (the signal was found or lost).
+  function pointKind(p) {
     const [lat0, lat1, lon0, lon1] = state.area;
-    if (p[1] - lat0 < EDGE_DEG || lat1 - p[1] < EDGE_DEG || p[2] - lon0 < EDGE_DEG || lon1 - p[2] < EDGE_DEG) return "left";
-    if (p[3] === 0) return "landed";
-    return "lost";
+    if (p[1] - lat0 < EDGE_DEG || lat1 - p[1] < EDGE_DEG || p[2] - lon0 < EDGE_DEG || lon1 - p[2] < EDGE_DEG) return "edge";
+    if (p[3] === 0) return "ground";
+    return "air";
   }
 
-  // A small canvas glyph for a segment end: filled square = landed,
-  // ring = left the area, cross = signal lost.
-  const EndMark = L.CircleMarker.extend({
+  // A small canvas glyph at a segment start or end. Outlined = start, filled =
+  // end: square = took off / landed, circle = entered / left the area,
+  // plus / cross = signal found / lost.
+  const TrackMark = L.CircleMarker.extend({
     _updatePath() {
       const r = this._renderer, ctx = r._ctx, p = this._point, s = this._radius;
       if (!r._drawing || this._empty()) return;
       ctx.beginPath();
-      if (this.options.kind === "landed") {
+      if (this.options.kind === "ground") {
         ctx.rect(p.x - s, p.y - s, 2 * s, 2 * s);
-      } else if (this.options.kind === "left") {
+      } else if (this.options.kind === "edge") {
         ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
-      } else {
+      } else if (this.options.end) {
         ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s);
         ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s);
+      } else {
+        ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y);
+        ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s);
       }
       r._fillStroke(ctx, this);
     }
@@ -309,15 +314,19 @@
       latest: line(lastLL, LATEST).addTo(group),
       ret: null
     };
-    // Mark why each earlier segment ends. The latest one ends under the aircraft symbol.
-    for (const s of a.segs.slice(0, -1)) {
-      const p = s.pts[s.pts.length - 1];
-      const kind = endKind(p);
-      new EndMark([p[1], p[2]], {
-        kind, radius: 3, color, weight: 1.5, opacity: 0.85,
-        fill: kind === "landed", fillColor: color, fillOpacity: 0.85, interactive: false
+    // Mark how each segment starts and ends. The latest segment's end sits
+    // under the aircraft symbol, so it gets no mark.
+    const mark = (p, end) => {
+      const kind = pointKind(p);
+      new TrackMark([p[1], p[2]], {
+        kind, end, radius: 3, color, weight: 1.5, opacity: 0.85,
+        fill: end && kind !== "air", fillColor: color, fillOpacity: 0.85, interactive: false
       }).addTo(group);
-    }
+    };
+    a.segs.forEach((s, i) => {
+      mark(s.pts[0], false);
+      if (i < a.segs.length - 1) mark(s.pts[s.pts.length - 1], true);
+    });
     const [, lat, lon] = a.lastPt;
     e.marker = L.marker([lat, lon], {
       keyboard: false, title: name(a),
