@@ -1,7 +1,7 @@
 # Sentinel
 
 A tactical-style map of where Swedish police and military aircraft (and foreign
-military aircraft over Sweden) have flown, built from open ADS-B data.
+military aircraft over the Nordic and Baltic countries) have flown, built from open ADS-B data.
 
 ```
 adsb.lol daily archives  ->  GitHub Actions (filter)  ->  `data` branch  ->  static map on Vercel
@@ -19,10 +19,12 @@ adsb.lol daily archives  ->  GitHub Actions (filter)  ->  `data` branch  ->  sta
 | ---------------- | --------------------------------------------------------------------- |
 | Police           | Swedish hex block (`4A8000`-`4AFFFF`) and registration `SE-JP*` (or owner contains "polis") |
 | Swedish military | Swedish hex block and flagged military in adsb.lol's aircraft database |
-| Foreign military | Flagged military, any other country, with positions inside the Sweden box |
+| Foreign military | Flagged military, any other country, with positions inside the stored area |
 
-Only positions inside the box 55.0-69.5 N, 10.5-24.5 E are stored. Edit the constants at the top of
-`scripts/process_day.py` to change the box, the sampling interval or the rules.
+Only positions inside the box 53.8-71.3 N, 4.0-31.7 E are stored. It covers Sweden, Norway, Finland, Denmark,
+Estonia, Latvia and Lithuania (and with them parts of Russia, Belarus, Poland and Germany). At most one
+point per 20 seconds is kept. Edit the constants at the top of `scripts/process_day.py` to change the box,
+the sampling interval or the rules; days processed before a change keep the old area until reprocessed.
 
 ### Limits to know about
 
@@ -74,7 +76,7 @@ Rebuild the day index only: `python3 scripts/process_day.py --out web/data --ind
 * The basemap is Esri's World Dark Gray Base from the keyless `server.arcgisonline.com` endpoint (CARTO's dark
   tiles now need an API key). Esri may put that endpoint behind a key too; Stadia Maps with domain-based access
   is the planned fallback. Check Esri's terms before using this commercially.
-* Data size: roughly 120 MB per year on the `data` branch.
+* Data size: roughly 150 MB per year on the `data` branch (about 375 KB per day).
 
 ## Layout
 

@@ -3,7 +3,7 @@
 Sentinel data processor.
 
 Streams one (or many) daily adsb.lol globe_history releases from GitHub,
-keeps only police and military aircraft over Sweden, and writes a compact
+keeps only police and military aircraft over the Nordic and Baltic countries, and writes a compact
 JSON file per day:  <out>/YYYY-MM-DD.json  plus  <out>/index.json.
 
 Standard library only. Needs `curl` on the PATH.
@@ -23,11 +23,11 @@ import time
 import urllib.request
 
 # --- tunables ---------------------------------------------------------------
-BBOX = (55.0, 69.5, 10.5, 24.5)          # lat_min, lat_max, lon_min, lon_max
+BBOX = (53.8, 71.3, 4.0, 31.7)           # lat_min, lat_max, lon_min, lon_max: SE, NO, FI, DK, EE, LV, LT
 SWE_HEX = (0x4A8000, 0x4AFFFF)           # Sweden's ICAO 24-bit address block
 POLICE_REG_PREFIX = "SE-JP"              # Swedish Police Authority registrations
 POLICE_OWNER = re.compile(r"polis", re.I)
-MIN_STEP_S = 10                          # keep at most one point per N seconds
+MIN_STEP_S = 20                          # keep at most one point per N seconds
 LEG_GAP_S = 300                          # a gap this long starts a new segment
 REPO = "adsblol/globe_history_{year}"
 TAG = "v{y:04d}.{m:02d}.{d:02d}-planes-readsb-prod-0"
@@ -142,7 +142,7 @@ def in_box(lat, lon):
 def build_segments(trace, base_ts, day_start):
     """Turn readsb trace points into compact segments of [t, lat, lon, alt].
     t is seconds since 00:00 UTC of the processed day. Only points inside the
-    Sweden box are kept; gaps and box exits start a new segment."""
+    stored area (BBOX) are kept; gaps and box exits start a new segment."""
     segs, cur = [], []
     prev_t = None
     last_kept_t = None

@@ -1,6 +1,6 @@
 # Sentinel
 
-Map of Swedish police and military aircraft from adsb.lol globe_history archives (ODbL).
+Map of Swedish police and military aircraft, plus foreign military over the Nordic and Baltic countries, from adsb.lol globe_history archives (ODbL).
 
 ## Layout
 - `scripts/process_day.py`: stdlib-only Python. Streams a daily ~3.8 GB release, writes compact JSON per day plus `index.json`.

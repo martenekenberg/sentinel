@@ -113,8 +113,9 @@ class BuildSegmentsTest(unittest.TestCase):
         self.assertEqual([p[0] for p in segs[0]], [0, 20])
 
     def test_sampling_keeps_one_point_per_min_step(self):
-        segs = self.seg([pt(t) for t in range(0, 31)])     # one point per second
-        self.assertEqual([p[0] for p in segs[0]], [0, 10, 20, 30])
+        step = pd.MIN_STEP_S
+        segs = self.seg([pt(t) for t in range(0, 3 * step + 1)])   # one point per second
+        self.assertEqual([p[0] for p in segs[0]], [0, step, 2 * step, 3 * step])
 
     def test_gap_starts_new_segment(self):
         gap = pd.LEG_GAP_S

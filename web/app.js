@@ -6,15 +6,18 @@
   const LABELS = { police: "POLICE", swe_mil: "SWEDISH MIL", foreign_mil: "FOREIGN MIL" };
   const CAT_RANK = { police: 0, swe_mil: 1, foreign_mil: 2 };
   const HEAT_MAX_POINTS = 30000;
-  const AREA = [55.0, 69.5, 10.5, 24.5];   // fallback for the stored area; day files carry their own bbox
+  const AREA = [53.8, 71.3, 4.0, 31.7];    // fallback for the stored area; day files carry their own bbox
   const EDGE_DEG = 0.15;                    // a segment ending this close to the area edge "left the area"
   const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  // A region is a point and zoom, or bounds to fit. "all" fits the stored area.
   const REGIONS = {
-    all: { center: [62.5, 16.5], zoom: 5 },
     sth: { center: [59.33, 18.07], zoom: 9 },
     got: { center: [57.71, 11.97], zoom: 9 },
     mal: { center: [55.6, 13.0], zoom: 9 },
-    lul: { center: [65.58, 22.15], zoom: 9 }
+    lul: { center: [65.58, 22.15], zoom: 9 },
+    osl: { center: [59.91, 10.75], zoom: 9 },
+    hel: { center: [60.17, 24.94], zoom: 9 },
+    bal: { bounds: [[53.9, 20.9], [59.7, 28.2]] }
   };
   const STOCKHOLM = [59.33, 18.07];
 
@@ -139,7 +142,12 @@
   // -------------------------------------------------------------------- map
   const map = L.map("map", {
     zoomControl: false, minZoom: 4, maxZoom: 13, zoomSnap: 0.5, preferCanvas: true
-  }).setView(REGIONS.all.center, REGIONS.all.zoom);
+  });
+  const areaBounds = () => {
+    const [lat0, lat1, lon0, lon1] = state.area;
+    return L.latLngBounds([lat0, lon0], [lat1, lon1]);
+  };
+  map.fitBounds(areaBounds());
 
   // Esri's keyless legacy endpoint. CARTO's dark tiles started requiring an API key in 2026-10.
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
@@ -568,7 +576,12 @@
     const zr = () => { $("#zread").textContent = "z" + map.getZoom(); };
     map.on("zoomend", zr); zr();
 
-    const flyRegion = (k) => map.flyTo(REGIONS[k].center, REGIONS[k].zoom, { duration: 0.8 });
+    const flyRegion = (k) => {
+      const r = REGIONS[k];
+      if (k === "all") map.flyToBounds(areaBounds(), { duration: 0.8 });
+      else if (r.bounds) map.flyToBounds(r.bounds, { duration: 0.8 });
+      else map.flyTo(r.center, r.zoom, { duration: 0.8 });
+    };
     $$("#regions [data-region]").forEach((b) => b.addEventListener("click", () => flyRegion(b.dataset.region)));
 
     const gridBtn = $("#gridBtn"), heatBtn = $("#heatBtn");
