@@ -6,6 +6,8 @@
   const LABELS = { police: "POLICE", swe_mil: "SWEDISH MIL", foreign_mil: "FOREIGN MIL" };
   const CAT_RANK = { police: 0, swe_mil: 1, foreign_mil: 2 };
   const HEAT_MAX_POINTS = 30000;
+  const AREA = [55.0, 69.5, 10.5, 24.5];   // fallback for the stored area; day files carry their own bbox
+  const EDGE_DEG = 0.15;                    // a segment ending this close to the area edge "left the area"
   const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   const REGIONS = {
     all: { center: [62.5, 16.5], zoom: 5 },
@@ -30,6 +32,7 @@
     typesOff: new Set(),
     heat: false,
     grid: true,
+    area: AREA,          // [lat_min, lat_max, lon_min, lon_max] of the stored data
     selected: null
   };
 
@@ -148,6 +151,7 @@
   map.getPane("grid").style.pointerEvents = "none";
 
   const ringLayer = L.layerGroup().addTo(map);
+  const areaLayer = L.layerGroup().addTo(map);
   const gridLayer = L.layerGroup().addTo(map);
   const trackLayer = L.layerGroup().addTo(map);
   let heatLayer = null;
@@ -168,6 +172,46 @@
       }).addTo(ringLayer);
     }
   }
+
+  // The box positions are kept for. Tracks that stop at its edge left the area.
+  function drawArea() {
+    areaLayer.clearLayers();
+    const [lat0, lat1, lon0, lon1] = state.area;
+    L.rectangle([[lat0, lon0], [lat1, lon1]], {
+      pane: "grid", color: "#3dffa8", weight: 1, opacity: 0.45, dashArray: "8 6", fill: false, interactive: false
+    }).addTo(areaLayer);
+    L.marker([lat1, lon0], {
+      pane: "grid", interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "", html: '<span class="arealab">STORED AREA</span>', iconSize: [0, 0], iconAnchor: [-6, -6] })
+    }).addTo(areaLayer);
+  }
+
+  // Why a track segment ends: on the ground, at the area edge, or anything else.
+  function endKind(p) {
+    const [lat0, lat1, lon0, lon1] = state.area;
+    if (p[1] - lat0 < EDGE_DEG || lat1 - p[1] < EDGE_DEG || p[2] - lon0 < EDGE_DEG || lon1 - p[2] < EDGE_DEG) return "left";
+    if (p[3] === 0) return "landed";
+    return "lost";
+  }
+
+  // A small canvas glyph for a segment end: filled square = landed,
+  // ring = left the area, cross = signal lost.
+  const EndMark = L.CircleMarker.extend({
+    _updatePath() {
+      const r = this._renderer, ctx = r._ctx, p = this._point, s = this._radius;
+      if (!r._drawing || this._empty()) return;
+      ctx.beginPath();
+      if (this.options.kind === "landed") {
+        ctx.rect(p.x - s, p.y - s, 2 * s, 2 * s);
+      } else if (this.options.kind === "left") {
+        ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+      } else {
+        ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s);
+        ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s);
+      }
+      r._fillStroke(ctx, this);
+    }
+  });
 
   function niceStep(degPerPx) {
     const target = degPerPx * 120;
@@ -265,6 +309,15 @@
       latest: line(lastLL, LATEST).addTo(group),
       ret: null
     };
+    // Mark why each earlier segment ends. The latest one ends under the aircraft symbol.
+    for (const s of a.segs.slice(0, -1)) {
+      const p = s.pts[s.pts.length - 1];
+      const kind = endKind(p);
+      new EndMark([p[1], p[2]], {
+        kind, radius: 3, color, weight: 1.5, opacity: 0.85,
+        fill: kind === "landed", fillColor: color, fillOpacity: 0.85, interactive: false
+      }).addTo(group);
+    }
     const [, lat, lon] = a.lastPt;
     e.marker = L.marker([lat, lon], {
       keyboard: false, title: name(a),
@@ -486,12 +539,15 @@
       const docs = await Promise.all(w.dates.map(loadDay));
       if (state.win !== w) return;         // a newer click superseded this one
       state.aircraft = mergeDays(docs);
+      const withBox = docs.find((d) => Array.isArray(d.bbox) && d.bbox.length === 4);
+      state.area = withBox ? withBox.bbox : AREA;
     } catch (err) {
       console.error(err);
       state.aircraft = [];
       showMsg("Could not load flight data for this window. " + err.message);
     }
     resetLayers();                         // cached layers belong to the old window
+    drawArea();
     render();
   }
 
